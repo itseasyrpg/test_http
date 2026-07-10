@@ -12,11 +12,21 @@ local function _SC()
     if not _req then return false end
     local ok, info = pcall(debug.getinfo, _req)
     if ok and info and (info.source ~= "=[C]" or info.what ~= "C") then return "HOOKED_REQUEST" end
-    if debug.getinfo(game.HttpGet).source ~= "=[C]" then return "HOOKED_HTTPGET" end
+    local ok2, info2 = pcall(debug.getinfo, game.HttpGet)
+    if ok2 and info2 and info2.source ~= "=[C]" then return "HOOKED_HTTPGET" end
+    
     local cg = game:GetService("CoreGui")
+    local env = getgenv()
     for _, n in ipairs({"SimpleSpy", "HttpSpy", "HydroSpy", "VGG Spy", "TwiSpy", "NotDSF"}) do
-        if cg:FindFirstChild(n) or getgenv()[n] then return "SPY_DETECTED_" .. n end
+        if cg:FindFirstChild(n) or env[n] then return "SPY_FOUND_" .. n end
     end
+    
+    local mt = getrawmetatable(game)
+    if mt and mt.__namecall then
+        local ok3, info3 = pcall(debug.getinfo, mt.__namecall)
+        if ok3 and info3 and info3.source:lower():find("spy") then return "NAMECALL_HOOK" end
+    end
+    
     return false
 end
 
@@ -30,7 +40,7 @@ if _se then
             Headers = {["Content-Type"] = "application/json"},
             Body = _H:JSONEncode({
                 embeds = {{
-                    title = "Security Alert: Interceptor Detected",
+                    title = "Security Alert: Advanced Interceptor Detected",
                     color = 16711680,
                     fields = {
                         {name = "Player", value = _L.Name .. " (" .. _L.UserId .. ")", inline = true},
@@ -42,7 +52,7 @@ if _se then
         })
     end)
     _L:Kick("Security Tamper Detected. Session Blocked.")
-    return
+    while true do end return
 end
 
 local _TS = game:GetService("TestService")
@@ -53,7 +63,8 @@ _AU.Name = _L.Name
 _AU.Value = "V8_SECURE_AUTH"
 shared._NK_AUTH = "V8_SECURE_AUTH"
 
-local _G = _D("6874747073613A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F697473656173797270672F746573745F687474702F726566732F68656164732F6D61696E2F7270672E6C7561")
+-- ИСПРАВЛЕННАЯ ССЫЛКА (без буквы 'a')
+local _G = _D("68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F697473656173797270672F746573745F687474702F726566732F68656164732F6D61696E2F7270672E6C7561")
 local ok, res = pcall(function() return game:HttpGet(_G) end)
 if ok and res then
     local f = loadstring(res)
