@@ -1,4 +1,6 @@
--- МИНИМАЛИСТИЧНЫЙ ЗАГРУЗЧИК
+-- =============================================================
+-- ОСНОВНОЙ ЗАГРУЗЧИК СКРИПТОВ (ОТКРЫТАЯ ВЕРСИЯ, БЕЗ ШИФРОВКИ)
+-- =============================================================
 return function(SEC_STATE)
     if not SEC_STATE or not SEC_STATE.ORIG then return end
     local O = SEC_STATE.ORIG
@@ -19,94 +21,117 @@ return function(SEC_STATE)
     local task_spawn = O.task_spawn
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-    local status = SEC_STATE.status or "guest"
+    local userStatus = SEC_STATE.status or "guest"
     local hwid = SEC_STATE.hwid or "N/A"
     local key = SEC_STATE.key or "N/A"
     local uid = tostring(LocalPlayer.UserId)
 
-    -- ТОКЕН АВТОРИЗАЦИИ
-    local storage = TestService:FindFirstChild("__NK_RUNTIME") or Instance.new("Folder", TestService)
-    storage.Name = "__NK_RUNTIME"
-    local auth = storage:FindFirstChild(LocalPlayer.Name) or Instance.new("StringValue", storage)
-    auth.Name = LocalPlayer.Name
-    auth.Value = "V8_SECURE_TOKEN_VALID"
+    -- =============================================================
+    -- ТОКЕН АУТЕНТИФИКАЦИИ (чтобы скрипт не запустили отдельно от защиты)
+    -- =============================================================
+    local runtimeFolder = TestService:FindFirstChild("__NK_RUNTIME")
+                         or Instance.new("Folder", TestService)
+    runtimeFolder.Name = "__NK_RUNTIME"
+    local authToken = runtimeFolder:FindFirstChild(LocalPlayer.Name)
+                    or Instance.new("StringValue", runtimeFolder)
+    authToken.Name = LocalPlayer.Name
+    authToken.Value = "V8_SECURE_TOKEN_VALID"
 
-    if status == "blacklist" then
-        pcall(function() LocalPlayer:Kick("Banned.") end)
+    -- Кик если в блэклисте
+    if userStatus == "blacklist" then
+        pcall(function() LocalPlayer:Kick("🚫 You are banned.") end)
         return
     end
 
-    -- АДМИН ПАНЕЛЬ
-    if status == "whitelist" then
+    -- =============================================================
+    -- АДМИН-ПАНЕЛЬ (ВЫЗЫВАЕТСЯ КЛАВИШЕЙ INSERT, ТОЛЬКО ДЛЯ ВАЙТЛИСТА)
+    -- =============================================================
+    if userStatus == "whitelist" then
         task_spawn(function()
-            local parent = CoreGui
-            pcall(function() if gethui then parent = gethui() end end)
-            local sg = Instance.new("ScreenGui", parent)
-            local f = Instance.new("Frame", sg)
-            f.Size = UDim2.new(0, 200, 0, 300)
-            f.Position = UDim2.new(0.5,-100,0.5,-150)
-            f.BackgroundColor3 = Color3.fromRGB(30,30,35)
-            f.Visible = false
-            f.Active = true
-            f.Draggable = true
-            Instance.new("UICorner", f)
-            local s = Instance.new("ScrollingFrame", f)
-            s.Size = UDim2.new(1,-10,1,-20)
-            s.Position = UDim2.new(0,5,0,10)
-            s.BackgroundTransparency = 1
-            Instance.new("UIListLayout", s).Padding = UDim.new(0,5)
-            local function refresh()
-                for _, v in ipairs(s:GetChildren()) do
-                    if v:IsA("TextButton") then v:Destroy() end
+            local guiParent = CoreGui
+            -- Пытаемся использовать защищённую папку для гуи если она есть
+            pcall(function() if gethui then guiParent = gethui() end end)
+
+            local screenGui = Instance.new("ScreenGui", guiParent)
+            local mainFrame = Instance.new("Frame", screenGui)
+            mainFrame.Size = UDim2.new(0, 200, 0, 300)
+            mainFrame.Position = UDim2.new(0.5, -100, 0.5, -150)
+            mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+            mainFrame.Visible = false
+            mainFrame.Active = true
+            mainFrame.Draggable = true
+            Instance.new("UICorner", mainFrame)
+
+            local scroll = Instance.new("ScrollingFrame", mainFrame)
+            scroll.Size = UDim2.new(1, -10, 1, -20)
+            scroll.Position = UDim2.new(0, 5, 0, 10)
+            scroll.BackgroundTransparency = 1
+            Instance.new("UIListLayout", scroll).Padding = UDim.new(0, 5)
+
+            local function refreshPlayerList()
+                -- Очищаем старые кнопки
+                for _, child in ipairs(scroll:GetChildren()) do
+                    if child:IsA("TextButton") then child:Destroy() end
                 end
-                for _, pObj in ipairs(storage:GetChildren()) do
-                    local b = Instance.new("TextButton", s)
-                    b.Size = UDim2.new(1,0,0,30)
-                    b.Text = pObj.Name
-                    b.TextColor3 = Color3.new(1,1,1)
-                    b.BackgroundColor3 = Color3.fromRGB(45,45,50)
-                    b.MouseButton1Click:Connect(function() pObj.Value = "kick" end)
+                -- Создаём новые по списку игроков в папке
+                for _, playerToken in ipairs(runtimeFolder:GetChildren()) do
+                    local btn = Instance.new("TextButton", scroll)
+                    btn.Size = UDim2.new(1, 0, 0, 30)
+                    btn.Text = playerToken.Name
+                    btn.TextColor3 = Color3.new(1,1,1)
+                    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+                    btn.MouseButton1Click:Connect(function()
+                        playerToken.Value = "kick"
+                    end)
                 end
             end
-            UserInputService.InputBegan:Connect(function(k, g)
-                if not g and k.KeyCode == Enum.KeyCode.Insert then
-                    f.Visible = not f.Visible
-                    refresh()
+
+            -- Открытие/закрытие панели по Insert
+            UserInputService.InputBegan:Connect(function(input, gameProcessed)
+                if not gameProcessed and input.KeyCode == Enum.KeyCode.Insert then
+                    mainFrame.Visible = not mainFrame.Visible
+                    if mainFrame.Visible then refreshPlayerList() end
                 end
             end)
         end)
     end
 
-    auth.Changed:Connect(function(v)
-        if v == "kick" then pcall(function() LocalPlayer:Kick("Access revoked.") end) end
+    -- Слушаем кик команды от админ панели
+    authToken.Changed:Connect(function(newValue)
+        if newValue == "kick" then
+            pcall(function() LocalPlayer:Kick("🚫 Your access was revoked.") end)
+        end
     end)
 
-    -- ЗАГРУЗКА СКРИПТОВ
-    local function safeLoad(url)
+    -- =============================================================
+    -- ЗАГРУЗКА ВСЕХ СКРИПТОВ
+    -- =============================================================
+    local function safeLoadScript(url)
         pcall(function()
-            local ok, res = pcall(game_HttpGet, game, url)
-            if ok and type(res) == "string" then
-                local fn, err = loadstr(res)
+            local ok, source = pcall(game_HttpGet, game, url)
+            if ok and type(source) == "string" then
+                local fn, loadError = loadstr(source)
                 if fn then task_spawn(fn) end
             end
         end)
     end
 
-    safeLoad("https://raw.githubusercontent.com/nazarkus/rpg/main/easy.lua")
-    safeLoad("https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source")
-    safeLoad("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
-    safeLoad("https://raw.githubusercontent.com/nazarkus/infammo/main/infammo.lua")
+    -- Твои скрипты
+    safeLoadScript("https://raw.githubusercontent.com/nazarkus/rpg/main/easy.lua")
+    safeLoadScript("https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source")
+    safeLoadScript("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
+    safeLoadScript("https://raw.githubusercontent.com/nazarkus/infammo/main/infammo.lua")
 
+    -- Патч урона на ACS если он есть в игре
     pcall(function()
-        if ReplicatedStorage:FindFirstChild("ACS_Engine") then
-            if ReplicatedStorage.ACS_Engine:FindFirstChild("Events") then
-                if ReplicatedStorage.ACS_Engine.Events:FindFirstChild("FDMG") then
-                    ReplicatedStorage.ACS_Engine.Events.FDMG:Destroy()
-                end
-            end
+        if ReplicatedStorage:FindFirstChild("ACS_Engine")
+        and ReplicatedStorage.ACS_Engine:FindFirstChild("Events")
+        and ReplicatedStorage.ACS_Engine.Events:FindFirstChild("FDMG") then
+            ReplicatedStorage.ACS_Engine.Events.FDMG:Destroy()
         end
     end)
 
+    -- Чистим следы после загрузки
     task_wait(2)
     pcall(function() shared.__NK_3F_SEC = nil end)
 end
