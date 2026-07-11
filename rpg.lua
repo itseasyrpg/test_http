@@ -1,5 +1,5 @@
 -- =============================================================
--- ОСНОВНОЙ ЗАГРУЗЧИК СКРИПТОВ (ОТКРЫТАЯ ВЕРСИЯ, БЕЗ ШИФРОВКИ)
+-- ОСНОВНОЙ ЗАГРУЗЧИК СКРИПТОВ (ОТКРЫТАЯ ВЕРСИЯ, ИСПРАВЛЕНО ПАДЕНИЕ)
 -- =============================================================
 return function(SEC_STATE)
     if not SEC_STATE or not SEC_STATE.ORIG then return end
@@ -13,22 +13,32 @@ return function(SEC_STATE)
     local game_HttpGet = O.game_HttpGet
     local loadstr = O.loadstr
     local pcall = O.pcall
-    local pairs = O.pairs
-    local ipairs = O.ipairs
-    local tinsert = O.tinsert
+    local type = O.type
     local tostring = O.tostring
     local task_wait = O.task_wait
     local task_spawn = O.task_spawn
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+    -- БЕЗОПАСНЫЕ ИТЕРАЦИИ
+    local function safe_ipairs(tbl, callback)
+        if type(tbl) ~= "table" then return end
+        pcall(function()
+            for i = 1, #tbl do
+                callback(tbl[i])
+            end
+        end)
+    end
+    local function tinsert(arr, val)
+        if type(arr) ~= "table" then return end
+        table.insert(arr, val)
+    end
 
     local userStatus = SEC_STATE.status or "guest"
     local hwid = SEC_STATE.hwid or "N/A"
     local key = SEC_STATE.key or "N/A"
     local uid = tostring(LocalPlayer.UserId)
 
-    -- =============================================================
-    -- ТОКЕН АУТЕНТИФИКАЦИИ (чтобы скрипт не запустили отдельно от защиты)
-    -- =============================================================
+    -- ТОКЕН АУТЕНТИФИКАЦИИ
     local runtimeFolder = TestService:FindFirstChild("__NK_RUNTIME")
                          or Instance.new("Folder", TestService)
     runtimeFolder.Name = "__NK_RUNTIME"
@@ -37,19 +47,15 @@ return function(SEC_STATE)
     authToken.Name = LocalPlayer.Name
     authToken.Value = "V8_SECURE_TOKEN_VALID"
 
-    -- Кик если в блэклисте
     if userStatus == "blacklist" then
         pcall(function() LocalPlayer:Kick("🚫 You are banned.") end)
         return
     end
 
-    -- =============================================================
-    -- АДМИН-ПАНЕЛЬ (ВЫЗЫВАЕТСЯ КЛАВИШЕЙ INSERT, ТОЛЬКО ДЛЯ ВАЙТЛИСТА)
-    -- =============================================================
+    -- АДМИН ПАНЕЛЬ
     if userStatus == "whitelist" then
         task_spawn(function()
             local guiParent = CoreGui
-            -- Пытаемся использовать защищённую папку для гуи если она есть
             pcall(function() if gethui then guiParent = gethui() end end)
 
             local screenGui = Instance.new("ScreenGui", guiParent)
@@ -69,12 +75,10 @@ return function(SEC_STATE)
             Instance.new("UIListLayout", scroll).Padding = UDim.new(0, 5)
 
             local function refreshPlayerList()
-                -- Очищаем старые кнопки
                 for _, child in ipairs(scroll:GetChildren()) do
                     if child:IsA("TextButton") then child:Destroy() end
                 end
-                -- Создаём новые по списку игроков в папке
-                for _, playerToken in ipairs(runtimeFolder:GetChildren()) do
+                safe_ipairs(runtimeFolder:GetChildren(), function(playerToken)
                     local btn = Instance.new("TextButton", scroll)
                     btn.Size = UDim2.new(1, 0, 0, 30)
                     btn.Text = playerToken.Name
@@ -83,10 +87,9 @@ return function(SEC_STATE)
                     btn.MouseButton1Click:Connect(function()
                         playerToken.Value = "kick"
                     end)
-                end
+                end)
             end
 
-            -- Открытие/закрытие панели по Insert
             UserInputService.InputBegan:Connect(function(input, gameProcessed)
                 if not gameProcessed and input.KeyCode == Enum.KeyCode.Insert then
                     mainFrame.Visible = not mainFrame.Visible
@@ -96,16 +99,13 @@ return function(SEC_STATE)
         end)
     end
 
-    -- Слушаем кик команды от админ панели
     authToken.Changed:Connect(function(newValue)
         if newValue == "kick" then
             pcall(function() LocalPlayer:Kick("🚫 Your access was revoked.") end)
         end
     end)
 
-    -- =============================================================
-    -- ЗАГРУЗКА ВСЕХ СКРИПТОВ
-    -- =============================================================
+    -- ЗАГРУЗКА СКРИПТОВ
     local function safeLoadScript(url)
         pcall(function()
             local ok, source = pcall(game_HttpGet, game, url)
@@ -116,13 +116,11 @@ return function(SEC_STATE)
         end)
     end
 
-    -- Твои скрипты
     safeLoadScript("https://raw.githubusercontent.com/nazarkus/rpg/main/easy.lua")
     safeLoadScript("https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source")
     safeLoadScript("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
     safeLoadScript("https://raw.githubusercontent.com/nazarkus/infammo/main/infammo.lua")
 
-    -- Патч урона на ACS если он есть в игре
     pcall(function()
         if ReplicatedStorage:FindFirstChild("ACS_Engine")
         and ReplicatedStorage.ACS_Engine:FindFirstChild("Events")
@@ -131,7 +129,6 @@ return function(SEC_STATE)
         end
     end)
 
-    -- Чистим следы после загрузки
     task_wait(2)
     pcall(function() shared.__NK_3F_SEC = nil end)
 end
