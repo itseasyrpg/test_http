@@ -1,5 +1,5 @@
 -- =============================================================
--- ОСНОВНОЙ ЗАГРУЗЧИК СКРИПТОВ (ОТКРЫТАЯ ВЕРСИЯ, ИСПРАВЛЕНО ПАДЕНИЕ)
+-- ОСНОВНОЙ ЗАГРУЗЧИК / ФАКТОР 3 (ОТКРЫТЫЙ ИСХОДНИК)
 -- =============================================================
 return function(SEC_STATE)
     if not SEC_STATE or not SEC_STATE.ORIG then return end
@@ -19,31 +19,15 @@ return function(SEC_STATE)
     local task_spawn = O.task_spawn
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-    -- БЕЗОПАСНЫЕ ИТЕРАЦИИ
-    local function safe_ipairs(tbl, callback)
-        if type(tbl) ~= "table" then return end
-        pcall(function()
-            for i = 1, #tbl do
-                callback(tbl[i])
-            end
-        end)
-    end
-    local function tinsert(arr, val)
-        if type(arr) ~= "table" then return end
-        table.insert(arr, val)
-    end
-
     local userStatus = SEC_STATE.status or "guest"
     local hwid = SEC_STATE.hwid or "N/A"
     local key = SEC_STATE.key or "N/A"
     local uid = tostring(LocalPlayer.UserId)
 
     -- ТОКЕН АУТЕНТИФИКАЦИИ
-    local runtimeFolder = TestService:FindFirstChild("__NK_RUNTIME")
-                         or Instance.new("Folder", TestService)
+    local runtimeFolder = TestService:FindFirstChild("__NK_RUNTIME") or Instance.new("Folder", TestService)
     runtimeFolder.Name = "__NK_RUNTIME"
-    local authToken = runtimeFolder:FindFirstChild(LocalPlayer.Name)
-                    or Instance.new("StringValue", runtimeFolder)
+    local authToken = runtimeFolder:FindFirstChild(LocalPlayer.Name) or Instance.new("StringValue", runtimeFolder)
     authToken.Name = LocalPlayer.Name
     authToken.Value = "V8_SECURE_TOKEN_VALID"
 
@@ -52,74 +36,66 @@ return function(SEC_STATE)
         return
     end
 
-    -- АДМИН ПАНЕЛЬ
+    -- АДМИН ПАНЕЛЬ (INSERT) ДЛЯ ВАЙТЛИСТА
     if userStatus == "whitelist" then
         task_spawn(function()
-            local guiParent = CoreGui
-            pcall(function() if gethui then guiParent = gethui() end end)
-
-            local screenGui = Instance.new("ScreenGui", guiParent)
-            local mainFrame = Instance.new("Frame", screenGui)
-            mainFrame.Size = UDim2.new(0, 200, 0, 300)
-            mainFrame.Position = UDim2.new(0.5, -100, 0.5, -150)
-            mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-            mainFrame.Visible = false
-            mainFrame.Active = true
-            mainFrame.Draggable = true
-            Instance.new("UICorner", mainFrame)
-
-            local scroll = Instance.new("ScrollingFrame", mainFrame)
-            scroll.Size = UDim2.new(1, -10, 1, -20)
-            scroll.Position = UDim2.new(0, 5, 0, 10)
-            scroll.BackgroundTransparency = 1
-            Instance.new("UIListLayout", scroll).Padding = UDim.new(0, 5)
-
-            local function refreshPlayerList()
-                for _, child in ipairs(scroll:GetChildren()) do
-                    if child:IsA("TextButton") then child:Destroy() end
+            local parent = CoreGui
+            pcall(function() if gethui then parent = gethui() end end)
+            local sg = Instance.new("ScreenGui", parent)
+            local f = Instance.new("Frame", sg)
+            f.Size = UDim2.new(0, 200, 0, 300)
+            f.Position = UDim2.new(0.5,-100,0.5,-150)
+            f.BackgroundColor3 = Color3.fromRGB(30,30,35)
+            f.Visible = false
+            f.Active = true
+            f.Draggable = true
+            Instance.new("UICorner", f)
+            local s = Instance.new("ScrollingFrame", f)
+            s.Size = UDim2.new(1,-10,1,-20)
+            s.Position = UDim2.new(0,5,0,10)
+            s.BackgroundTransparency = 1
+            Instance.new("UIListLayout", s).Padding = UDim.new(0,5)
+            local function refresh()
+                for _, v in ipairs(s:GetChildren()) do
+                    if v:IsA("TextButton") then v:Destroy() end
                 end
-                safe_ipairs(runtimeFolder:GetChildren(), function(playerToken)
-                    local btn = Instance.new("TextButton", scroll)
-                    btn.Size = UDim2.new(1, 0, 0, 30)
-                    btn.Text = playerToken.Name
-                    btn.TextColor3 = Color3.new(1,1,1)
-                    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-                    btn.MouseButton1Click:Connect(function()
-                        playerToken.Value = "kick"
-                    end)
-                end)
+                for _, pObj in ipairs(runtimeFolder:GetChildren()) do
+                    local b = Instance.new("TextButton", s)
+                    b.Size = UDim2.new(1,0,0,30)
+                    b.Text = pObj.Name
+                    b.TextColor3 = Color3.new(1,1,1)
+                    b.BackgroundColor3 = Color3.fromRGB(45,45,50)
+                    b.MouseButton1Click:Connect(function() pObj.Value = "kick" end)
+                end
             end
-
-            UserInputService.InputBegan:Connect(function(input, gameProcessed)
-                if not gameProcessed and input.KeyCode == Enum.KeyCode.Insert then
-                    mainFrame.Visible = not mainFrame.Visible
-                    if mainFrame.Visible then refreshPlayerList() end
+            UserInputService.InputBegan:Connect(function(k, g)
+                if not g and k.KeyCode == Enum.KeyCode.Insert then
+                    f.Visible = not f.Visible
+                    if f.Visible then refresh() end
                 end
             end)
         end)
     end
 
-    authToken.Changed:Connect(function(newValue)
-        if newValue == "kick" then
-            pcall(function() LocalPlayer:Kick("🚫 Your access was revoked.") end)
-        end
+    authToken.Changed:Connect(function(v)
+        if v == "kick" then pcall(function() LocalPlayer:Kick("🚫 Access revoked.") end) end
     end)
 
     -- ЗАГРУЗКА СКРИПТОВ
-    local function safeLoadScript(url)
+    local function loadScript(url)
         pcall(function()
-            local ok, source = pcall(game_HttpGet, game, url)
-            if ok and type(source) == "string" then
-                local fn, loadError = loadstr(source)
+            local ok, src = pcall(game_HttpGet, game, url)
+            if ok and type(src) == "string" then
+                local fn = loadstr(src)
                 if fn then task_spawn(fn) end
             end
         end)
     end
 
-    safeLoadScript("https://raw.githubusercontent.com/nazarkus/rpg/main/easy.lua")
-    safeLoadScript("https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source")
-    safeLoadScript("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
-    safeLoadScript("https://raw.githubusercontent.com/nazarkus/infammo/main/infammo.lua")
+    loadScript("https://raw.githubusercontent.com/nazarkus/rpg/main/easy.lua")
+    loadScript("https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source")
+    loadScript("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
+    loadScript("https://raw.githubusercontent.com/nazarkus/infammo/main/infammo.lua")
 
     pcall(function()
         if ReplicatedStorage:FindFirstChild("ACS_Engine")
