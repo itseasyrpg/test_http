@@ -1,5 +1,5 @@
 -- =============================================================
--- АНТИ HTTP СПАЙ (ОТКРЫТАЯ ВЕРСИЯ, БЕЗ ШИФРОВКИ)
+-- АНТИ HTTP СПАЙ (ОТКРЫТАЯ ВЕРСИЯ, ИСПРАВЛЕНО ПАДЕНИЕ PAIRS)
 -- ЗАМЕНИ ВЕБХУКИ И ССЫЛКИ ЕСЛИ НУЖНО
 -- =============================================================
 
@@ -109,8 +109,18 @@ local function detect(reason)
     SEC_STATE.reason = reason
 end
 
+-- ВСПОМОГАТЕЛЬНАЯ БЕЗОПАСНАЯ ИТЕРАЦИЯ (НИКОГДА НЕ ПАДАЕТ)
+local function safe_pairs(tbl, callback)
+    if type(tbl) ~= "table" then return end
+    pcall(function()
+        for k, v in pairs(tbl) do
+            callback(k, v)
+        end
+    end)
+end
+
 -- =============================================================
--- ПРОВЕРКИ НА HTTP СПАИ
+-- ПРОВЕРКИ НА HTTP СПАИ (100% БЕЗ ПАДЕНИЙ)
 -- =============================================================
 
 -- 1. Проверка что реквест и HttpGet это нативные C-функции (не хукнуты)
@@ -143,12 +153,12 @@ do
     if ok and type(files) == "table" then
         for _, file in ipairs(files) do
             local filename = tostring(file):lower()
-            if filename:match("^%d+%-%d+_%d+_%d+%-log%.txt$") -- Стандартное имя лога HttpSpy
-            or filename:find("httpspy", 1, true)
-            or filename:find("simplespy", 1, true)
-            or filename:find("hydrospy", 1, true)
-            or filename:find("httplogger", 1, true)
-            or filename:find("requestlog", 1, true) then
+            if s_find(filename, "^%d+%-%d+_%d+_%d+%-log%.txt$") -- Стандартное имя лога HttpSpy
+            or s_find(filename, "httpspy", 1, true)
+            or s_find(filename, "simplespy", 1, true)
+            or s_find(filename, "hydrospy", 1, true)
+            or s_find(filename, "httplogger", 1, true)
+            or s_find(filename, "requestlog", 1, true) then
                 detect("SPY_LOG_FILE_FOUND")
                 break
             end
@@ -156,30 +166,27 @@ do
     end
 end
 
--- 4. Канарный тест: отправляем фейковый запрос с уникальным токеном,
---    после чего ищем этот токен в памяти. Если он найден где-то помимо нас — спай его записал в лог.
+-- 4. Канарный тест БЕЗ СКАНА GC (чтобы не было падений)
+-- Если запрос не завершился мгновенно и завис на yield от хука — значит спай перехватил его
 local CANARY_TOKEN = "__NK_CANARY_CHECK_" .. m_floor(os_clock() * 1000000)
+local canaryFinished = false
 do
-    pcall(function()
-        request({
-            Url = "https://0.0.0.0/invalid-canary",
-            Method = "POST",
-            Headers = {["X-AntiSpy-Canary"] = CANARY_TOKEN},
-            Body = "marker=" .. CANARY_TOKEN
-        })
+    task_spawn(function()
+        pcall(function()
+            request({
+                Url = "https://0.0.0.0/invalid-canary",
+                Method = "POST",
+                Headers = {["X-AntiSpy-Canary"] = CANARY_TOKEN},
+                Body = "marker=" .. CANARY_TOKEN
+            })
+        end)
+        canaryFinished = true
     end)
-    task_wait(0.08)
-    local getgc = getFunc("getgc")
-    if getgc then
-        local ok, gcObjects = pcall(getgc, false)
-        if ok and type(gcObjects) == "table" then
-            for _, obj in pairs(gcObjects) do
-                if type(obj) == "string" and obj ~= CANARY_TOKEN and s_find(obj, CANARY_TOKEN, 1, true) then
-                    detect("CANARY_TOKEN_LEAKED_SPY_LOGGING")
-                    break
-                end
-            end
-        end
+    -- Ждём максимум 100мс, реальный запрос на невалидный адрес падает мгновенно,
+    -- а если спай оборачивает в coroutine.yield — запрос повиснет и таймаут сработает
+    task_wait(0.1)
+    if not canaryFinished then
+        detect("CANARY_YIELD_HOOKED_REQUEST")
     end
 end
 
