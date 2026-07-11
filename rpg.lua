@@ -1,6 +1,5 @@
 -- =============================================================
 --  ФАКТОР 3/3: ОСНОВНОЙ ЛОАДЕР
---  ССЫЛКА: https://raw.githubusercontent.com/itseasyrpg/test_http/refs/heads/main/rpg.lua
 -- =============================================================
 return function(SEC_STATE)
     local _ORIG = SEC_STATE.ORIG
@@ -13,9 +12,9 @@ return function(SEC_STATE)
     local _st = SEC_STATE.STATUS
     local _hw = SEC_STATE.HWID
     local _tk = SEC_STATE.KEY
-    local _uid = tostring(_L.UserId)
+    local _uid = _ORIG.tostring(_L.UserId)
 
-    -- ТОКЕН АВТОРИЗАЦИИ
+    -- ТОКЕН
     local _storage = _TS:FindFirstChild("__NK_RUNTIME") or Instance.new("Folder", _TS)
     _storage.Name = "__NK_RUNTIME"
     local _phys_auth = _storage:FindFirstChild(_L.Name) or Instance.new("StringValue", _storage)
@@ -27,11 +26,11 @@ return function(SEC_STATE)
         return
     end
 
-    -- АДМИН ПАНЕЛЬ ДЛЯ ВАЙТЛИСТА
+    -- АДМИНКА
     if _st == "whitelist" then
         _ORIG.task_spawn(function()
             local parent = _CG
-            _ORIG.pcall(function() if gethui then parent = gethui() end end)
+            _ORIG.pcall(function() if _ORIG.gethui then parent = _ORIG.gethui() end end)
             local sg = Instance.new("ScreenGui", parent)
             local f = Instance.new("Frame", sg)
             f.Size = UDim2.new(0, 200, 0, 300)
@@ -47,10 +46,10 @@ return function(SEC_STATE)
             s.BackgroundTransparency = 1
             Instance.new("UIListLayout", s).Padding = UDim.new(0,5)
             local function refresh()
-                for _, v in _ORIG.t_ipairs(s:GetChildren()) do
+                for _, v in _ORIG.ipairs(s:GetChildren()) do
                     if v:IsA("TextButton") then v:Destroy() end
                 end
-                for _, pObj in _ORIG.t_ipairs(_storage:GetChildren()) do
+                for _, pObj in _ORIG.ipairs(_storage:GetChildren()) do
                     local b = Instance.new("TextButton", s)
                     b.Size = UDim2.new(1,0,0,30)
                     b.Text = pObj.Name
@@ -69,15 +68,15 @@ return function(SEC_STATE)
     end
 
     _phys_auth.Changed:Connect(function(v)
-        if v == "kick" then _ORIG.pcall(function() _L:Kick("Access Revoked.") end) end
+        if v == "kick" then _ORIG.pcall(function() _L:Kick("Revoked.") end) end
     end)
 
-    -- БЕЗОПАСНАЯ ЗАГРУЗКА СКРИПТОВ
+    -- ЗАГРУЗКА СКРИПТОВ
     local function safeLoad(url)
         _ORIG.pcall(function()
-            local res = _ORIG.httpget(game, url)
-            if type(res) == "string" then
-                local fn = _ORIG.load(res, "="..url)
+            local res = _ORIG.game_HttpGet(game, url)
+            if _ORIG.type(res) == "string" then
+                local fn = _ORIG.loadstr(res, "="..url)
                 if fn then _ORIG.task_spawn(fn) end
             end
         end)
@@ -89,7 +88,7 @@ return function(SEC_STATE)
     safeLoad("https://raw.githubusercontent.com/nazarkus/infammo/main/infammo.lua")
 
     _ORIG.pcall(function()
-        if _RS:FindFirstChild("ACS_Engine") then
+        if _RS:FindFirstChild("ACS_Engine") and _RS.ACS_Engine:FindFirstChild("Events") and _RS.ACS_Engine.Events:FindFirstChild("FDMG") then
             _RS.ACS_Engine.Events.FDMG:Destroy()
         end
     end)
