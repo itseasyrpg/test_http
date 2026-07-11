@@ -1,14 +1,15 @@
 -- =============================================================
--- АНТИ HTTP СПАЙ / ФАКТОР 1 (ОТКРЫТЫЙ ИСХОДНИК, БЕЗ ЛОЖНЫХ СРАБАТЫВАНИЙ)
+-- АНТИ HTTP СПАЙ / ФАКТОР 1 (ОТКРЫТЫЙ ИСХОДНИК)
+-- ДЕТЕКТИТ HTTPSPY ДАЖЕ ЕСЛИ ОН ЗАПУЩЕН ДО НАШЕГО СКРИПТА
 -- =============================================================
 
--- СТАНДАРТНЫЕ ФУНКЦИИ (ГАРАНТИРОВАННО ЕСТЬ ВЕЗДЕ)
+-- СОХРАНЯЕМ ОРИГИНАЛЫ В САМОМ НАЧАЛЕ (ДАЖЕ ЕСЛИ ОНИ УЖЕ ХУКНУТЫ, МЫ ПОЙМЁМ ЭТО ПО ФАЙЛАМ)
 local pairs, ipairs    = pairs, ipairs
 local tinsert, tconcat = table.insert, table.concat
 local pcall, xpcall    = pcall, xpcall
 local tostring, type   = tostring, type
 local m_floor, m_random = math.floor, math.random
-local s_find, s_sub, s_lower = string.find, string.sub, string.lower
+local s_find, s_sub, s_lower, s_match = string.find, string.sub, string.lower, string.match
 local task_wait, task_spawn = task.wait, task.spawn
 local os_clock = os.clock
 
@@ -22,7 +23,7 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer      = Players.LocalPlayer
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- БЕЗОПАСНЫЙ ПОИСК ФУНКЦИЙ
+-- БЕЗОПАСНЫЙ РЕЗОЛВ ФУНКЦИЙ
 local env = getfenv(0)
 local function getFunc(...)
     local cur = env
@@ -35,7 +36,6 @@ local function getFunc(...)
     return cur
 end
 
--- РЕЗОЛВ ФУНКЦИЙ ЭКСПЛОЙТА
 local getgenv      = getFunc("getgenv") or function() return env end
 local getmetatable = getFunc("getmetatable")
 local setmetatable = getFunc("setmetatable")
@@ -43,6 +43,11 @@ local loadstring   = getFunc("loadstring") or getFunc("load")
 local readfile     = getFunc("readfile") or function() return "" end
 local listfiles    = getFunc("listfiles") or function() return {} end
 local gethui       = getFunc("gethui")
+local writefile    = getFunc("writefile")
+local appendfile   = getFunc("appendfile")
+local rconsoleprint = getFunc("rconsoleprint") or print
+local hookfunction  = getFunc("hookfunction")
+local newcclosure   = getFunc("newcclosure") or function(f) return f end
 
 -- РЕЗОЛВ РЕКВЕСТА
 local request = getFunc("syn", "request")
@@ -62,6 +67,7 @@ if not request then
 end
 local game_HttpGet = game.HttpGet
 local game_HttpPost = game.HttpPost
+local game_HttpGetAsync = game.HttpGetAsync
 
 -- ССЫЛКИ
 local INFORMANT_URL = "https://raw.githubusercontent.com/itseasyrpg/test_http/refs/heads/main/informant.lua"
@@ -109,122 +115,113 @@ local function detect(reason)
     SEC_STATE.reason = reason
 end
 
--- СОХРАНЯЕМ ОРИГИНАЛЬНУЮ ИНФУ О МЕТАТАБЛЕ GAME ЧТОБЫ ПОЙМАТЬ ПОЗДНИЙ ХУК
-local originalGameMeta = nil
-if getmetatable then
-    local ok, meta = pcall(getmetatable, game)
-    if ok then originalGameMeta = meta end
-end
-
 -- =============================================================
--- ПРОВЕРКИ (ТОЛЬКО 100% ДОСТОВЕРНЫЕ, НЕТ ЛОЖНЫХ СРАБАТЫВАНИЙ)
+-- САМАЯ ПЕРВАЯ ПРОВЕРКА: ИЩЕМ ФАЙЛЫ ЛОГОВ КОТОРЫЕ СОЗДАЁТ HTTPSPY
+-- ОН СОЗДАЁТ ИХ ДО ЗАПУСКА НАШЕГО СКРИПТА, ЕСЛИ ЗАПУЩЕН ПЕРВЫМ
 -- =============================================================
-
--- 1. Проверка файлов логов СПАЕВ (ТОЧНОЕ СОВПАДЕНИЕ ИМЕНИ ФАЙЛА, НЕ ЧАСТИЧНОЕ!)
-do
+local function scanForSpyFiles()
     local ok, files = pcall(listfiles, "")
     if ok and type(files) == "table" then
         for _, file in ipairs(files) do
             local fn = s_lower(tostring(file))
-            -- Только точные паттерны логов известных спаев:
-            if fn:match("^%d+%-%d%d?_%d%d?_%d%d?%-log%.txt$") -- HttpSpy: PlaceId-DD_MM_YY-log.txt
-            or fn == "simplespy_logs.txt"
-            or fn == "hydrospy_logs.txt"
-            or fn == "https.py_logs.txt" then
+            -- HttpSpy сохраняет логи по шаблону: PlaceId-DD_MM_YY-log.txt
+            -- На скриншоте файл назывался 123974602339071-11_07_26-log.txt
+            if s_match(fn, "^%d+%-%d+_%d+_%d+%-log%.txt$") then
+                detect("HTTPSPY_LOGFILE_EXISTS:"..tostring(file))
+                return true
+            end
+            if fn:find("httpspy", 1, true)
+            or fn:find("simplespy", 1, true)
+            or fn:find("hydrospy", 1, true)
+            or fn:find("venusspy", 1, true) then
                 detect("SPY_LOGFILE:"..tostring(file))
-                break
+                return true
             end
         end
     end
+    return false
+end
+-- Сканируем файлы СРАЗУ после старта
+scanForSpyFiles()
+-- Сканируем ещё раз через 0.1 секунды, если файл был создан только что
+if not SEC_STATE.detected then task_spawn(function() task_wait(0.1) scanForSpyFiles() end) end
+
+-- =============================================================
+-- ПРОВЕРКА НА ВЫВОД В КОНСОЛЬ ОТ HTTPSPY
+-- Если спай запущен раньше нас он уже вывел строку "eleutheri.com" и "HttpSpy v" в rconsoleprint
+-- Мы перехватываем rconsoleprint и если приходит любая строка с сигнатурой спая — детект
+-- =============================================================
+if not SEC_STATE.detected and hookfunction and rconsoleprint and rconsoleprint ~= print then
+    local originalRcon = rconsoleprint
+    hookfunction(rconsoleprint, newcclosure(function(...)
+        local args = {...}
+        for _, a in ipairs(args) do
+            local str = tostring(a)
+            -- Уникальные строки которые выводит ТОЛЬКО HttpSpy
+            if s_find(str, "eleutheri.com", 1, true)
+            or s_find(str, "HttpSpy v", 1, true)
+            or s_find(str, "logs are automatically being saved", 1, true)
+            or s_find(str, "SimpleSpy", 1, true)
+            or s_find(str, "HydroSpy", 1, true) then
+                detect("RCONSOLE_SPY_OUTPUT")
+            end
+        end
+        return originalRcon(...)
+    end))
 end
 
--- 2. Поиск GUI спаев в CoreGui/gethui (спаи не прячут свои окна в защищённые области)
-do
+-- =============================================================
+-- ПРОВЕРКА ГУИ СПАЕВ
+-- =============================================================
+if not SEC_STATE.detected then
     local function scanGui(parent)
-        if not parent then return end
+        if not parent then return false end
+        local found = false
         pcall(function()
             for _, child in ipairs(parent:GetChildren()) do
                 local nm = s_lower(child.Name)
-                if nm == "httpspy" or nm == "simplespy" or nm == "hydrospy" or nm == "vgspy" or nm == "twispy" then
+                if nm == "httpspy" or nm == "simplespy" or nm == "hydrospy" then
                     detect("SPY_GUI:"..child.Name)
-                    return true
-                end
-                -- Сканируем на 1 уровень вглубь (не глубже, чтобы не ловить лишнее)
-                for _, subchild in ipairs(child:GetChildren()) do
-                    local snm = s_lower(subchild.Name)
-                    if snm:find("spy", 1, true) and subchild:FindFirstChildWhichIsA("ScrollingFrame") then
-                        detect("SPY_GUI_SUSPECT:"..child.Name.."/"..subchild.Name)
-                        return true
-                    end
+                    found = true
+                    return
                 end
             end
         end)
-        return false
+        return found
     end
-    if scanGui(CoreGui) then end
+    scanGui(CoreGui)
     if gethui then scanGui(gethui()) end
-    if scanGui(LocalPlayer:FindFirstChildOfClass("PlayerGui")) then end
+    scanGui(LocalPlayer:FindFirstChildOfClass("PlayerGui"))
 end
 
--- 3. Проверка глобальных переменных на спайские
-do
+-- =============================================================
+-- ПРОВЕРКА ГЛОБАЛОВ
+-- =============================================================
+if not SEC_STATE.detected then
     for _, tab in ipairs({getgenv(), shared, _G}) do
         pcall(function()
             for k in pairs(tab) do
                 local ks = s_lower(tostring(k))
-                if ks == "httpspy" or ks == "simplespy" or ks == "hydrospy" or ks == "venusspy" or ks == "fenixspy" then
-                    detect("SPY_GLOBAL:"..tostring(k))
+                if ks == "httpspy" or ks == "simplespy" or ks == "hydrospy" or ks == "venusspy" then
+                    detect("SPY_GLOBAL_VAR:"..tostring(k))
                 end
             end
         end)
+        if SEC_STATE.detected then break end
     end
 end
 
--- 4. Проверка что request и HttpGet не хуканы (пропускаем стандартные луа обёртки эксплойтов)
-local function isNativeC(f)
-    if type(f) ~= "function" then return false end
-    local dinfo = getFunc("debug", "getinfo")
-    if not dinfo then return true end -- Если нет дебага — пропускаем проверку
-    local ok, info = pcall(dinfo, f)
-    if not ok or not info then return true end
-    -- Если это С-функция — всё ок
-    if info.what == "C" and info.source == "=[C]" then return true end
-    -- Если это луа функция из самой среды эксплойта — игнорируем, не детектим
-    if info.short_src and (info.short_src:find("=[C]", 1, true) or info.short_src:find("(sentinel)",1,true) or info.short_src:find("(crillo)",1,true)) then
-        return true
-    end
-    -- Иначе это хук
-    return false
-end
--- Проверяем только game.HttpGet и game.HttpPost (их спаи всегда хукуют, эксплойты не трогают)
-if not isNativeC(game_HttpGet) then detect("HOOKED_HTTPGET") end
-if not isNativeC(game_HttpPost) then detect("HOOKED_HTTPPOST") end
-
--- 5. Проверка __namecall: детектим ТОЛЬКО ЕСЛИ ЭТО НОВЫЙ ХУК ПОСЛЕ ЗАПУСКА СКРИПТА
-local function getNamecall()
-    if not getmetatable then return nil end
-    local ok, meta = pcall(getmetatable, game)
-    if ok and meta then return meta.__namecall end
-    return nil
-end
-local originalNamecall = getNamecall()
-if originalNamecall and isNativeC(originalNamecall) == false then
-    -- Если __namecall был уже хукнут до запуска нашего скрипта — проверяем по сигнатурам в gc если возможно
-    -- Но чтобы не давать ложных срабатываний на обёртки эксплойта — пока пропускаем, будем ловить поздний хук
-end
-
 -- =============================================================
--- ЗАГРУЖАЕМ ЛОГГЕР (ФАКТОР 2) — ВСЕГДА, ВНЕ ЗАВИСИМОСТИ ОТ ДЕТЕКТА
+-- ЛОГГЕР: ОТПРАВЛЯЕМ ЛОГ ВСЕГДА, ЖДЁМ ОТПРАВКУ, КИКАЕМ ПОСЛЕ
 -- =============================================================
-local function sendLogAndKickIfNeeded()
-    -- СНАЧАЛА ОТПРАВЛЯЕМ ЛОГ, ЖДЁМ ПОКА ОН ТОЧНО УЙДЁТ, ТОЛЬКО ПОТОМ КИКАЕМ
+local function sendLogAndKick()
     local okInf, srcInf = pcall(game_HttpGet, game, INFORMANT_URL)
     if okInf and type(srcInf) == "string" then
-        local fnInf, errInf = loadstring(srcInf)
+        local fnInf = loadstring(srcInf)
         if fnInf then
             task_spawn(fnInf, SEC_STATE)
-            -- ЖДЁМ 1 СЕКУНДУ ЧТОБЫ ЗАПРОС НА ВЕБХУК УСПЕЛ ОТПРАВИТЬСЯ
-            task_wait(1)
+            -- ЖДЁМ ПОЛТОРЫ СЕКУНДЫ ЧТОБЫ ЗАПРОС ТОЧНО УШЁЛ
+            task_wait(1.5)
         end
     end
     if SEC_STATE.detected then
@@ -232,61 +229,54 @@ local function sendLogAndKickIfNeeded()
         while true do task_wait() end
     end
 end
+if SEC_STATE.detected then
+    sendLogAndKick()
+    return
+end
 
--- ЗАПУСКАЕМ ОТПРАВКУ ЛОГА
-task_spawn(sendLogAndKickIfNeeded)
--- ЖДЁМ ЗАГРУЗКИ ЛОГГЕРА ПЕРЕД ДАЛЬНЕЙШИМИ ДЕЙСТВИЯМИ
-task_wait(1.2)
+task_spawn(sendLogAndKick)
+task_wait(1.7)
 if SEC_STATE.detected then return end
 
 -- =============================================================
--- ФОНОВАЯ ЗАЩИТА НА ВСЮ СЕССИЮ (ЛОВИТ ПОЗДНИЙ ЗАПУСК СПАЯ)
+-- ФОНОВАЯ ЗАЩИТА
 -- =============================================================
 task_spawn(function()
+    local lastFileCheck = 0
     while not SEC_STATE.detected do
-        task_wait(1)
-        -- Проверяем что метатабл game не поменялся (спай хукирует __namecall)
-        local currentMeta = nil
+        task_wait(0.5)
+        -- Проверка на новые файлы логов раз в 2 секунды
+        lastFileCheck = lastFileCheck + 0.5
+        if lastFileCheck >= 2 then
+            lastFileCheck = 0
+            scanForSpyFiles()
+        end
+        -- Проверка изменения __namecall (если спай запустят после нас)
         if getmetatable then
             local ok, meta = pcall(getmetatable, game)
-            if ok then currentMeta = meta end
-        end
-        if currentMeta ~= originalGameMeta then detect("LATE_METATABLE_CHANGE") end
-        -- Проверяем что __namecall не поменялся на луа функцию
-        local currentNc = getNamecall()
-        if currentNc ~= originalNamecall then detect("LATE_NAMECALL_CHANGE") end
-        -- Проверяем что HttpGet не был хукнут позднее
-        if not isNativeC(game_HttpGet) then detect("LATE_HOOK_HTTPGET") end
-        -- Проверяем файлы на новые логи спаев раз в 5 секунд
-        if os.clock() % 5 < 1 then
-            local ok, files = pcall(listfiles, "")
-            if ok and type(files) == "table" then
-                for _, file in ipairs(files) do
-                    local fn = s_lower(tostring(file))
-                    if fn:match("^%d+%-%d%d?_%d%d?_%d%d?%-log%.txt$") then
-                        detect("LATE_SPY_LOGFILE")
-                        break
-                    end
+            if ok and meta and meta.__namecall then
+                local islclosure = getFunc("islclosure")
+                if islclosure then
+                    local ok2, isLua = pcall(islclosure, meta.__namecall)
+                    if ok2 and isLua then detect("LATE_NAMECALL_HOOK") end
                 end
             end
         end
-        if SEC_STATE.detected then
-            -- Если поймали поздний спай — отправляем алерт и кикаем
-            sendLogAndKickIfNeeded()
-            break
-        end
+    end
+    if SEC_STATE.detected then
+        sendLogAndKick()
     end
 end)
 
 -- =============================================================
--- ЗАГРУЖАЕМ ОСНОВНОЙ СКРИПТ (ФАКТОР 3)
+-- ЗАГРУЗКА RPG
 -- =============================================================
 local okRpg, srcRpg = pcall(game_HttpGet, game, RPG_URL)
 if not okRpg or type(srcRpg) ~= "string" then
     pcall(function() LocalPlayer:Kick("Connection error") end)
     while true do task_wait() end
 end
-local fnRpg, errRpg = loadstring(srcRpg)
+local fnRpg = loadstring(srcRpg)
 if not fnRpg then
     pcall(function() LocalPlayer:Kick("Loader error") end)
     while true do task_wait() end
