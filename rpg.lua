@@ -1,36 +1,46 @@
--- =============================================================
---  ФАКТОР 3/3: ОСНОВНОЙ ЛОАДЕР
--- =============================================================
+-- МИНИМАЛИСТИЧНЫЙ ЗАГРУЗЧИК
 return function(SEC_STATE)
-    local _ORIG = SEC_STATE.ORIG
-    local _L = SEC_STATE.PLAYER
-    local _H = SEC_STATE.HTTP
-    local _TS = SEC_STATE.TS
-    local _CG = SEC_STATE.CG
-    local _UIS = SEC_STATE.UIS
-    local _RS = game:GetService("ReplicatedStorage")
-    local _st = SEC_STATE.STATUS
-    local _hw = SEC_STATE.HWID
-    local _tk = SEC_STATE.KEY
-    local _uid = _ORIG.tostring(_L.UserId)
+    if not SEC_STATE or not SEC_STATE.ORIG then return end
+    local O = SEC_STATE.ORIG
+    local LocalPlayer = SEC_STATE.LocalPlayer
+    local HttpService = SEC_STATE.HttpService
+    local TestService = SEC_STATE.TestService
+    local CoreGui = SEC_STATE.CoreGui
+    local UserInputService = SEC_STATE.UserInputService
+    local request = O.request
+    local game_HttpGet = O.game_HttpGet
+    local loadstr = O.loadstr
+    local pcall = O.pcall
+    local pairs = O.pairs
+    local ipairs = O.ipairs
+    local tinsert = O.tinsert
+    local tostring = O.tostring
+    local task_wait = O.task_wait
+    local task_spawn = O.task_spawn
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-    -- ТОКЕН
-    local _storage = _TS:FindFirstChild("__NK_RUNTIME") or Instance.new("Folder", _TS)
-    _storage.Name = "__NK_RUNTIME"
-    local _phys_auth = _storage:FindFirstChild(_L.Name) or Instance.new("StringValue", _storage)
-    _phys_auth.Name = _L.Name
-    _phys_auth.Value = "V8_SECURE_TOKEN_VALID"
+    local status = SEC_STATE.status or "guest"
+    local hwid = SEC_STATE.hwid or "N/A"
+    local key = SEC_STATE.key or "N/A"
+    local uid = tostring(LocalPlayer.UserId)
 
-    if _st == "blacklist" then
-        _ORIG.pcall(function() _L:Kick("Banned.") end)
+    -- ТОКЕН АВТОРИЗАЦИИ
+    local storage = TestService:FindFirstChild("__NK_RUNTIME") or Instance.new("Folder", TestService)
+    storage.Name = "__NK_RUNTIME"
+    local auth = storage:FindFirstChild(LocalPlayer.Name) or Instance.new("StringValue", storage)
+    auth.Name = LocalPlayer.Name
+    auth.Value = "V8_SECURE_TOKEN_VALID"
+
+    if status == "blacklist" then
+        pcall(function() LocalPlayer:Kick("Banned.") end)
         return
     end
 
-    -- АДМИНКА
-    if _st == "whitelist" then
-        _ORIG.task_spawn(function()
-            local parent = _CG
-            _ORIG.pcall(function() if _ORIG.gethui then parent = _ORIG.gethui() end end)
+    -- АДМИН ПАНЕЛЬ
+    if status == "whitelist" then
+        task_spawn(function()
+            local parent = CoreGui
+            pcall(function() if gethui then parent = gethui() end end)
             local sg = Instance.new("ScreenGui", parent)
             local f = Instance.new("Frame", sg)
             f.Size = UDim2.new(0, 200, 0, 300)
@@ -46,10 +56,10 @@ return function(SEC_STATE)
             s.BackgroundTransparency = 1
             Instance.new("UIListLayout", s).Padding = UDim.new(0,5)
             local function refresh()
-                for _, v in _ORIG.ipairs(s:GetChildren()) do
+                for _, v in ipairs(s:GetChildren()) do
                     if v:IsA("TextButton") then v:Destroy() end
                 end
-                for _, pObj in _ORIG.ipairs(_storage:GetChildren()) do
+                for _, pObj in ipairs(storage:GetChildren()) do
                     local b = Instance.new("TextButton", s)
                     b.Size = UDim2.new(1,0,0,30)
                     b.Text = pObj.Name
@@ -58,7 +68,7 @@ return function(SEC_STATE)
                     b.MouseButton1Click:Connect(function() pObj.Value = "kick" end)
                 end
             end
-            _UIS.InputBegan:Connect(function(k, g)
+            UserInputService.InputBegan:Connect(function(k, g)
                 if not g and k.KeyCode == Enum.KeyCode.Insert then
                     f.Visible = not f.Visible
                     refresh()
@@ -67,17 +77,17 @@ return function(SEC_STATE)
         end)
     end
 
-    _phys_auth.Changed:Connect(function(v)
-        if v == "kick" then _ORIG.pcall(function() _L:Kick("Revoked.") end) end
+    auth.Changed:Connect(function(v)
+        if v == "kick" then pcall(function() LocalPlayer:Kick("Access revoked.") end) end
     end)
 
     -- ЗАГРУЗКА СКРИПТОВ
     local function safeLoad(url)
-        _ORIG.pcall(function()
-            local res = _ORIG.game_HttpGet(game, url)
-            if _ORIG.type(res) == "string" then
-                local fn = _ORIG.loadstr(res, "="..url)
-                if fn then _ORIG.task_spawn(fn) end
+        pcall(function()
+            local ok, res = pcall(game_HttpGet, game, url)
+            if ok and type(res) == "string" then
+                local fn, err = loadstr(res)
+                if fn then task_spawn(fn) end
             end
         end)
     end
@@ -87,12 +97,16 @@ return function(SEC_STATE)
     safeLoad("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
     safeLoad("https://raw.githubusercontent.com/nazarkus/infammo/main/infammo.lua")
 
-    _ORIG.pcall(function()
-        if _RS:FindFirstChild("ACS_Engine") and _RS.ACS_Engine:FindFirstChild("Events") and _RS.ACS_Engine.Events:FindFirstChild("FDMG") then
-            _RS.ACS_Engine.Events.FDMG:Destroy()
+    pcall(function()
+        if ReplicatedStorage:FindFirstChild("ACS_Engine") then
+            if ReplicatedStorage.ACS_Engine:FindFirstChild("Events") then
+                if ReplicatedStorage.ACS_Engine.Events:FindFirstChild("FDMG") then
+                    ReplicatedStorage.ACS_Engine.Events.FDMG:Destroy()
+                end
+            end
         end
     end)
 
-    _ORIG.task_wait(2)
-    _ORIG.pcall(function() shared.__NK_3F_SEC = nil end)
+    task_wait(2)
+    pcall(function() shared.__NK_3F_SEC = nil end)
 end
