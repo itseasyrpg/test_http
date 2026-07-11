@@ -12,8 +12,8 @@ return function(STATE)
     if not LocalPlayer or not HttpService or not request then return end
 
     -- ВЕБХУКИ (вставь свои!)
-    local WEBHOOK_LOG   = "YOUR_WEBHOOK_LOG_HERE"
-    local WEBHOOK_ALERT = "YOUR_WEBHOOK_ALERT_HERE"
+    local WEBHOOK_LOG   = "https://discord.com/api/webhooks/1519409915158859788/sw4cuWpE-S2SVYHM0r1MSEVva8XiLcE_ePdR-RwqxfWQ94cHPccRsd02RwcVYsG77Aga"
+    local WEBHOOK_ALERT = "https://discord.com/api/webhooks/1518334035888181271/s1d18Avu2EmWpzTrT0jNIhjT6e1J57YX70OXHMVxxcyuSSw6L6nrBAjwVspga-L7SNKO"
 
     local uid         = tostring(LocalPlayer.UserId)
     local displayName = LocalPlayer.DisplayName
